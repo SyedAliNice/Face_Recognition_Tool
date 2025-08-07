@@ -7,7 +7,7 @@ import os
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
-    page_title=" Face Recognition System",
+    page_title="Face Recognition System",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -17,46 +17,65 @@ def set_custom_styles():
     st.markdown("""
     <style>
     .stApp {
-        background-image: url('D:\task21\task\download.jpeg');
-        background-size: cover;
-        background-attachment: fixed;
-        color: white;
+        background-color: #2f3640;
+        color: #f5f6fa;
+        font-family: 'Arial', sans-serif;
     }
-    .appview-container::before {
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.7);
-        z-index: -1;
-    }
+
     section[data-testid="stSidebar"] {
-        background-color: rgba(0,0,0,0.8);
+        background-color: #1e272e;
+        padding: 2rem;
+        border-right: 2px solid #57606f;
     }
-    .block-container {
-        padding: 2rem 3rem;
+
+    h1, h2, h3, .stMarkdown, .stTextInput label, .stFileUploader label {
+        color: #f5f6fa;
     }
+
     .stTextInput > div > input,
     .stFileUploader > div > button,
     .stButton > button {
-        background-color: #1f2937;
+        background-color: #3742fa;
         color: white;
-        border-radius: 10px;
-        padding: 0.5rem 1rem;
-        font-weight: 600;
+        border: none;
+        border-radius: 6px;
+        padding: 0.6rem 1rem;
+        font-weight: bold;
+        transition: background-color 0.3s ease;
     }
+
     .stButton > button:hover {
-        background-color: #2563eb;
+        background-color: #2f3542;
+        color: #dcdde1;
     }
-    h1, h2, h3 {
-        color: #60a5fa;
-        text-shadow: 0 1px 4px rgba(0,0,0,0.6);
-    }
+
     img {
-        border-radius: 12px;
-        box-shadow: 0 0 10px rgba(0,0,0,0.6);
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+        margin-top: 1rem;
+    }
+
+    .block-container {
+        padding: 2rem 3rem;
+    }
+
+    .stSuccess, .stWarning, .stError {
+        border-radius: 6px;
+        padding: 1rem;
+        font-weight: bold;
+        color: white;
+    }
+
+    .stSuccess {
+        background-color: #44bd32;
+    }
+
+    .stWarning {
+        background-color: #e1b12c;
+    }
+
+    .stError {
+        background-color: #e84118;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -81,21 +100,28 @@ def save_features(names, descriptors_list):
         pickle.dump({"names": names, "descriptors_list": descriptors_list}, f)
 
 def get_face_features(image):
-    rgb_image = cv2.cvtColor(np.array(image), cv2.COLOR_BGR2RGB)
+    # Use original image for extraction, and convert a copy for detection only
+    rgb_image = cv2.cvtColor(image.copy(), cv2.COLOR_BGR2RGB)
     results = face_detection.process(rgb_image)
+
     if not results.detections:
         return None, None, "No face detected."
+
     detection = results.detections[0]
     bbox = detection.location_data.relative_bounding_box
     h, w = image.shape[:2]
     x, y, width, height = int(bbox.xmin * w), int(bbox.ymin * h), int(bbox.width * w), int(bbox.height * h)
     face_region = cv2.cvtColor(image[max(0, y):y+height, max(0, x):x+width], cv2.COLOR_BGR2GRAY)
+
     if face_region.size == 0:
         return None, None, "Invalid face region."
+
     face_region = cv2.resize(face_region, (100, 100))
     keypoints, descriptors = orb.detectAndCompute(face_region, None)
+
     if descriptors is None:
         return None, None, "No features extracted."
+
     return keypoints, descriptors, None
 
 def find_match(descriptors, stored_descriptors_list, names):
@@ -123,14 +149,15 @@ def find_match(descriptors, stored_descriptors_list, names):
 # ---------- MAIN ----------
 def main():
     set_custom_styles()
-    st.title(" Face Recognition System")
+    st.title("Face Recognition System")
 
     if "data" not in st.session_state:
         st.session_state.data = load_features()
 
-    st.sidebar.header("➕ Add New Face")
+    st.sidebar.header("Add New Face")
     name = st.sidebar.text_input("Name")
     uploaded_files = st.sidebar.file_uploader("Upload up to 6 face images", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+
     if st.sidebar.button("Add Face"):
         if name and uploaded_files:
             if len(uploaded_files) > 6:
@@ -154,20 +181,27 @@ def main():
         else:
             st.sidebar.error("Name & image(s) required.")
 
-    st.header("🧠 Recognize Face")
+    st.header("Recognize Face")
     test_image = st.file_uploader("Upload image to recognize", type=["jpg", "png", "jpeg"])
     if test_image:
-        image = cv2.imdecode(np.frombuffer(test_image.read(), np.uint8), 1)
-        keypoints, descriptors, error = get_face_features(image)
+        # Read the image and keep the original for display
+        image_data = test_image.read()
+        image_array = np.frombuffer(image_data, np.uint8)
+        image_bgr = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+        # Convert to RGB for display in Streamlit
+        image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+        # Use the BGR image for processing
+        keypoints, descriptors, error = get_face_features(image_bgr)
         if error:
             st.error(error)
         else:
-            st.image(image, caption="Uploaded Image", use_column_width=True)
+            # Display the RGB image to preserve original colors
+            st.image(image_rgb, caption="Uploaded Image", use_column_width=True)
             matched_name, distance = find_match(descriptors, st.session_state.data["descriptors_list"], st.session_state.data["names"])
             if matched_name:
-                st.success(f"✅ Match Found: **{matched_name}**\nAverage Distance: `{distance:.2f}`")
+                st.success(f"Match Found: *{matched_name}*\nAverage Distance: {distance:.2f}")
             else:
-                st.warning("❌ No match found.")
+                st.warning("No match found.")
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     main()
