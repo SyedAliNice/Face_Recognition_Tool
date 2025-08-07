@@ -203,5 +203,6 @@ def main():
             else:
                 st.warning("No match found.")
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     main()
+
